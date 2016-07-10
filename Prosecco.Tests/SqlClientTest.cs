@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Threading.Tasks;
 using NSubstitute;
 using Prosecco;
@@ -11,12 +12,21 @@ namespace Prosecco.Tests
 {
     public class SqlClientTest
     {
-        private readonly string connectionString = @"FAKE";
+        private const string ConnectionString = @"FAKE";
+        private const string QueryText = @"SELECT FROM abc;";
+        private readonly Dictionary<string, object> QueryParameters =
+            new Dictionary<string, object>
+            {
+                { "a", "a" },
+                { "b", 2 }
+            };
+
         private readonly SqlClient sut;
 
         private readonly IDbConnection connection;
         private readonly SqlCommand dbCommand;
         const int nonQueryCommandAffectedRows = 1;
+        private SqlDataReader dataReader;
 
         public SqlClientTest()
         {
@@ -30,44 +40,45 @@ namespace Prosecco.Tests
 
                 return Task.FromResult(nonQueryCommandAffectedRows);
             };
+            Func<SqlCommand, Task<SqlDataReader>> readerExecutor = command =>
+            {
+                dataReader = Create<SqlDataReader>.UsingPrivateConstructor(
+                    new object[]
+                    {
+                        dbCommand,
+                        CommandBehavior.Default
+                    });
+                return Task.FromResult(dataReader);
+            };
 
             sut = new SqlClient(
-                connectionString,
+                ConnectionString,
                 received =>
                 {
                     Assert.True(
-                        received == connectionString,
-                        $"Expected connection string '{connectionString}' was '{received}'");
+                        received == ConnectionString,
+                        $"Expected connection string '{ConnectionString}' was '{received}'");
 
                     return connection;
                 },
-                nonQueryExecutor);
+                nonQueryExecutor,
+                readerExecutor);
         }
 
         [Fact]
         public async void ExecuteNonQueryAsyncFlowIsCorrect()
         {
             // Arrange
-            var queryText = "query...";
-            var parameters = new Dictionary<string, object>
-            {
-                { "a", "a" },
-                { "b", 2 }
-            };
-
             connection.CreateCommand().Returns(dbCommand);
 
             // Act
-            var affectedRows = await sut.ExecuteNonQueryAsync(queryText, parameters);
+            var affectedRows = await sut.ExecuteNonQueryAsync(QueryText, QueryParameters);
 
             // Assert
             connection.Received(1).Open();
 
-            Assert.Equal(queryText, dbCommand.CommandText);
-            foreach (var parameter in parameters)
-            {
-                Assert.Equal(parameter.Value, dbCommand.Parameters[parameter.Key].Value);
-            }
+            Assert.Equal(QueryText, dbCommand.CommandText);
+            Assert.True(ParametersRelayedCorrectly());
 
             Assert.Equal(nonQueryCommandAffectedRows, affectedRows);
         }
@@ -76,33 +87,37 @@ namespace Prosecco.Tests
         [Fact]
         public async void ExecuteReaderAsyncFlowIsCorrect()
         {
-            // Arrange
-            var queryText = "query...";
-            var parameters = new Dictionary<string, object>
-            {
-                { "a", "a" },
-                { "b", 2 }
-            };
-
+            // Arrang
             connection.CreateCommand().Returns(dbCommand);
 
             var expectedResult = new List<string> { "A", "B" };
 
-            Func<SqlDataReader, List<string>> reader = _ => expectedResult;
+            Func<SqlDataReader, List<string>> reader = receivedDataReader =>
+            {
+                Assert.Same(dataReader, receivedDataReader);
+                return expectedResult;
+            };
 
             // Act
-            var affectedRows = await sut.ExecuteReaderAsync(queryText, parameters, reader);
+            var affectedRows = await sut.ExecuteReaderAsync(QueryText, QueryParameters, reader);
 
             // Assert
             connection.Received(1).Open();
 
-            Assert.Equal(queryText, dbCommand.CommandText);
-            foreach (var parameter in parameters)
-            {
-                Assert.Equal(parameter.Value, dbCommand.Parameters[parameter.Key].Value);
-            }
+            Assert.Equal(QueryText, dbCommand.CommandText);
+            Assert.True(ParametersRelayedCorrectly());
 
             Assert.Equal<List<string>>(expectedResult, affectedRows);
+        }
+
+        private bool ParametersRelayedCorrectly()
+        {
+            var parameterCountEquals =
+                QueryParameters.Count == dbCommand.Parameters.Count;
+            var parametersRelayedCorrectly =
+                QueryParameters.All(p => dbCommand.Parameters[p.Key].Value == p.Value);
+
+            return parameterCountEquals && parametersRelayedCorrectly;
         }
     }
 }

@@ -15,40 +15,42 @@ namespace Prosecco
         private static readonly Func<SqlCommand, Task<int>> DefaultNonQueryExecutor =
             dbCmd => dbCmd.ExecuteNonQueryAsync();
 
-        // private static readonly Task<SqlDataReader> DefaultReaderExecutor;
+        private static readonly Func<SqlCommand, Task<SqlDataReader>> DefaultReaderExecutor =
+            dbCmd => dbCmd.ExecuteReaderAsync();
 
 
         private readonly Func<IDbConnection> createConnection;
-        private readonly Func<SqlCommand, Task<int>> nonQueryExecutor;
-        // private readonly Task<SqlDataReader> readerExecutor;
+        private readonly Func<SqlCommand, Task<int>> executeNonQuery;
+        private readonly Func<SqlCommand, Task<SqlDataReader>> executeReader;
 
         public SqlClient(string connectionString)
-            : this(connectionString, cs => new SqlConnection(cs))
+            : this(connectionString, runtimeConnectionString => new SqlConnection(runtimeConnectionString))
         {
         }
 
         public SqlClient(
             string connectionString,
             Func<string, IDbConnection> connectionCreator = null,
-            Func<SqlCommand, Task<int>> nonQueryExecutor = null)
+            Func<SqlCommand, Task<int>> executeNonQuery = null,
+            Func<SqlCommand, Task<SqlDataReader>> executeReader = null)
         {
             this.createConnection =
                 () => connectionCreator != null ?
                     connectionCreator(connectionString) :
                     DefaultConnectionCreator(connectionString);
 
-            this.nonQueryExecutor = nonQueryExecutor ?? DefaultNonQueryExecutor;
+            this.executeNonQuery = executeNonQuery ?? DefaultNonQueryExecutor;
 
-            // this.readerExecutor = readerExecutor ?? DefaultReaderExecutor;
+            this.executeReader = executeReader ?? DefaultReaderExecutor;
         }
 
         public Task<int> ExecuteNonQueryAsync(
             string queryText,
             IDictionary<string, object> parameters = null)
         {
-            return ExecuteAsync(queryText, parameters, nonQueryExecutor);
+            return ExecuteAsync(queryText, parameters, executeNonQuery);
         }
-
+        
         public Task<T> ExecuteReaderAsync<T>(
             string queryText,
             Func<SqlDataReader, T> run)
@@ -61,7 +63,7 @@ namespace Prosecco
             IDictionary<string, object> parameters,
             Func<SqlDataReader, T> readResults)
         {
-            return ExecuteAsync(queryText, parameters, async dbCmd => readResults(await dbCmd.ExecuteReaderAsync()));
+            return ExecuteAsync(queryText, parameters, async dbCmd => readResults(await executeReader(dbCmd)));
         }
 
         private async Task<T> ExecuteAsync<T>(
@@ -71,7 +73,7 @@ namespace Prosecco
         {
             parameters = parameters.NullToEmpty();
 
-            using (IDbConnection dbConnection = createConnection())
+            using (var dbConnection = createConnection())
             {
                 dbConnection.Open();
 
