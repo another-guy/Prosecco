@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
+using ConstructionSet;
 using NSubstitute;
 using Prosecco;
 using Xunit;
@@ -42,12 +43,7 @@ namespace Prosecco.Tests
             };
             Func<SqlCommand, Task<SqlDataReader>> readerExecutor = command =>
             {
-                dataReader = Create<SqlDataReader>.UsingPrivateConstructor(
-                    new object[]
-                    {
-                        dbCommand,
-                        CommandBehavior.Default
-                    });
+                dataReader = Create<SqlDataReader>.UsingPrivateConstructor(dbCommand, CommandBehavior.Default);
                 return Task.FromResult(dataReader);
             };
 
