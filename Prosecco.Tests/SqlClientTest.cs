@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Xml;
 using ConstructionSet;
 using NSubstitute;
 using Xunit;
@@ -28,6 +29,7 @@ namespace Prosecco.Tests
         const int nonQueryCommandAffectedRows = 1;
         const string scalarResult = "scalar result";
         private SqlDataReader dataReader;
+        private XmlReader xmlReader;
 
         public SqlClientTest()
         {
@@ -43,6 +45,10 @@ namespace Prosecco.Tests
             };
             Func<SqlCommand, Task<SqlDataReader>> readerExecutor = command =>
             {
+                Assert.True(
+                    command == dbCommand,
+                    $"Expected command '{dbCommand}' was '{command}'");
+
                 dataReader = Create<SqlDataReader>.UsingPrivateConstructor(dbCommand, CommandBehavior.Default);
                 return Task.FromResult(dataReader);
             };
@@ -53,6 +59,15 @@ namespace Prosecco.Tests
                     $"Expected command '{dbCommand}' was '{command}'");
 
                 return Task.FromResult((object)scalarResult);
+            };
+            Func<SqlCommand, Task<XmlReader>> xmlReaderExecutor = command =>
+            {
+                Assert.True(
+                    command == dbCommand,
+                    $"Expected command '{dbCommand}' was '{command}'");
+
+                xmlReader = Substitute.For<XmlReader>();
+                return Task.FromResult(xmlReader);
             };
 
             sut = new SqlClient(
@@ -67,7 +82,8 @@ namespace Prosecco.Tests
                 },
                 nonQueryExecutor,
                 readerExecutor,
-                scalarExecutor);
+                scalarExecutor,
+                xmlReaderExecutor);
         }
 
         [Fact]
@@ -131,6 +147,32 @@ namespace Prosecco.Tests
             Assert.True(ParametersRelayedCorrectly());
 
             Assert.Equal(scalarResult, result as string);
+        }
+
+        [Fact]
+        public async void ExecuteXmlReaderAsyncFlowIsCorrect()
+        {
+            // Arrange
+            connection.CreateCommand().Returns(dbCommand);
+
+            var expectedResult = new List<string> { "A", "B" };
+
+            Func<XmlReader, List<string>> reader = receivedDataReader =>
+            {
+                Assert.Same(xmlReader, receivedDataReader);
+                return expectedResult;
+            };
+
+            // Act
+            var result = await sut.ExecuteXmlReaderAsync(QueryText, QueryParameters, reader);
+
+            // Assert
+            connection.Received(1).Open();
+
+            Assert.Equal(QueryText, dbCommand.CommandText);
+            Assert.True(ParametersRelayedCorrectly());
+
+            Assert.Equal<List<string>>(expectedResult, result);
         }
 
         private bool ParametersRelayedCorrectly()

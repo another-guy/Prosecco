@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Threading.Tasks;
+using System.Xml;
 
 namespace Prosecco
 {
@@ -21,11 +22,15 @@ namespace Prosecco
         private static readonly Func<SqlCommand, Task<object>> DefaultScalarExecutor =
             dbCmd => dbCmd.ExecuteScalarAsync();
 
+        private static readonly Func<SqlCommand, Task<XmlReader>> DefaultXmlReaderExecutor =
+            dbCmd => dbCmd.ExecuteXmlReaderAsync();
+
 
         private readonly Func<IDbConnection> createConnection;
         private readonly Func<SqlCommand, Task<int>> executeNonQuery;
         private readonly Func<SqlCommand, Task<SqlDataReader>> executeReader;
         private readonly Func<SqlCommand, Task<object>> scalarExecutor;
+        private readonly Func<SqlCommand, Task<XmlReader>> xmlReaderExecutor;
 
         public SqlClient(string connectionString)
             : this(connectionString, runtimeConnectionString => new SqlConnection(runtimeConnectionString))
@@ -37,7 +42,8 @@ namespace Prosecco
             Func<string, IDbConnection> connectionCreator = null,
             Func<SqlCommand, Task<int>> executeNonQuery = null,
             Func<SqlCommand, Task<SqlDataReader>> executeReader = null,
-            Func<SqlCommand, Task<object>> scalarExecutor = null)
+            Func<SqlCommand, Task<object>> scalarExecutor = null,
+            Func<SqlCommand, Task<XmlReader>> xmlReaderExecutor = null)
         {
             this.createConnection =
                 () => connectionCreator != null ?
@@ -49,6 +55,8 @@ namespace Prosecco
             this.executeReader = executeReader ?? DefaultReaderExecutor;
 
             this.scalarExecutor = scalarExecutor ?? DefaultScalarExecutor;
+
+            this.xmlReaderExecutor = xmlReaderExecutor ?? DefaultXmlReaderExecutor;
         }
 
         public Task<int> ExecuteNonQueryAsync(
@@ -78,6 +86,21 @@ namespace Prosecco
             IDictionary<string, object> parameters)
         {
             return ExecuteAsync(queryText, parameters, async dbCmd => await scalarExecutor(dbCmd));
+        }
+        
+        public Task<T> ExecuteXmlReaderAsync<T>(
+            string queryText,
+            Func<XmlReader, T> run)
+        {
+            return ExecuteXmlReaderAsync(queryText, null, run);
+        }
+
+        public Task<T> ExecuteXmlReaderAsync<T>(
+            string queryText,
+            IDictionary<string, object> parameters,
+            Func<XmlReader, T> readXmlResults)
+        {
+            return ExecuteAsync(queryText, parameters, async dbCmd => readXmlResults(await xmlReaderExecutor(dbCmd)));
         }
 
         private async Task<T> ExecuteAsync<T>(
