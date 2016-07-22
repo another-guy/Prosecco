@@ -81,10 +81,6 @@ Prosecco is a available in a form of a NuGet package.
 Follow regular installation process to bring it to your project.
 https://www.nuget.org/packages/Prosecco/
 
-## API Reference
-
-// TODO
-
 ## Tests
 
 Unit tests are available in Prosecco.Tests project.
