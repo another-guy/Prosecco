@@ -59,7 +59,7 @@ https://www.nuget.org/packages/Prosecco/
 
 ## Tests
 
-There are no automated tests for the project at the moment.
+Unit tests are available in Prosecco.Tests project.
 
 ## License
 
