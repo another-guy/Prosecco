@@ -6,7 +6,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using ConstructionSet;
 using NSubstitute;
-using Prosecco;
 using Xunit;
 
 namespace Prosecco.Tests
@@ -27,6 +26,7 @@ namespace Prosecco.Tests
         private readonly IDbConnection connection;
         private readonly SqlCommand dbCommand;
         const int nonQueryCommandAffectedRows = 1;
+        const string scalarResult = "scalar result";
         private SqlDataReader dataReader;
 
         public SqlClientTest()
@@ -46,6 +46,14 @@ namespace Prosecco.Tests
                 dataReader = Create<SqlDataReader>.UsingPrivateConstructor(dbCommand, CommandBehavior.Default);
                 return Task.FromResult(dataReader);
             };
+            Func<SqlCommand, Task<object>> scalarExecutor = command =>
+            {
+                Assert.True(
+                    command == dbCommand,
+                    $"Expected command '{dbCommand}' was '{command}'");
+
+                return Task.FromResult((object)scalarResult);
+            };
 
             sut = new SqlClient(
                 ConnectionString,
@@ -58,7 +66,8 @@ namespace Prosecco.Tests
                     return connection;
                 },
                 nonQueryExecutor,
-                readerExecutor);
+                readerExecutor,
+                scalarExecutor);
         }
 
         [Fact]
@@ -83,7 +92,7 @@ namespace Prosecco.Tests
         [Fact]
         public async void ExecuteReaderAsyncFlowIsCorrect()
         {
-            // Arrang
+            // Arrange
             connection.CreateCommand().Returns(dbCommand);
 
             var expectedResult = new List<string> { "A", "B" };
@@ -104,6 +113,24 @@ namespace Prosecco.Tests
             Assert.True(ParametersRelayedCorrectly());
 
             Assert.Equal<List<string>>(expectedResult, affectedRows);
+        }
+
+        [Fact]
+        public async void ExecuteScalarAsyncFlowIsCorrect()
+        {
+            // Arrange
+            connection.CreateCommand().Returns(dbCommand);
+
+            // Act
+            var result = await sut.ExecuteScalarAsync(QueryText, QueryParameters);
+
+            // Assert
+            connection.Received(1).Open();
+
+            Assert.Equal(QueryText, dbCommand.CommandText);
+            Assert.True(ParametersRelayedCorrectly());
+
+            Assert.Equal(scalarResult, result as string);
         }
 
         private bool ParametersRelayedCorrectly()

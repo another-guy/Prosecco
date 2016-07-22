@@ -18,10 +18,14 @@ namespace Prosecco
         private static readonly Func<SqlCommand, Task<SqlDataReader>> DefaultReaderExecutor =
             dbCmd => dbCmd.ExecuteReaderAsync();
 
+        private static readonly Func<SqlCommand, Task<object>> DefaultScalarExecutor =
+            dbCmd => dbCmd.ExecuteScalarAsync();
+
 
         private readonly Func<IDbConnection> createConnection;
         private readonly Func<SqlCommand, Task<int>> executeNonQuery;
         private readonly Func<SqlCommand, Task<SqlDataReader>> executeReader;
+        private readonly Func<SqlCommand, Task<object>> scalarExecutor;
 
         public SqlClient(string connectionString)
             : this(connectionString, runtimeConnectionString => new SqlConnection(runtimeConnectionString))
@@ -32,7 +36,8 @@ namespace Prosecco
             string connectionString,
             Func<string, IDbConnection> connectionCreator = null,
             Func<SqlCommand, Task<int>> executeNonQuery = null,
-            Func<SqlCommand, Task<SqlDataReader>> executeReader = null)
+            Func<SqlCommand, Task<SqlDataReader>> executeReader = null,
+            Func<SqlCommand, Task<object>> scalarExecutor = null)
         {
             this.createConnection =
                 () => connectionCreator != null ?
@@ -42,6 +47,8 @@ namespace Prosecco
             this.executeNonQuery = executeNonQuery ?? DefaultNonQueryExecutor;
 
             this.executeReader = executeReader ?? DefaultReaderExecutor;
+
+            this.scalarExecutor = scalarExecutor ?? DefaultScalarExecutor;
         }
 
         public Task<int> ExecuteNonQueryAsync(
@@ -64,6 +71,13 @@ namespace Prosecco
             Func<SqlDataReader, T> readResults)
         {
             return ExecuteAsync(queryText, parameters, async dbCmd => readResults(await executeReader(dbCmd)));
+        }
+
+        public Task<object> ExecuteScalarAsync(
+            string queryText,
+            IDictionary<string, object> parameters)
+        {
+            return ExecuteAsync(queryText, parameters, async dbCmd => await scalarExecutor(dbCmd));
         }
 
         private async Task<T> ExecuteAsync<T>(
