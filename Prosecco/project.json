@@ -3,7 +3,7 @@
 
   "dependencies": {
     "NETStandard.Library": "1.6.0",
-    "Peppermint": "1.0.0-alpha3",
+    "Peppermint": "1.0.0-alpha5",
     "System.Data.SqlClient": "4.1.0"
   },
 
