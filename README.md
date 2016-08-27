@@ -1,5 +1,7 @@
 ﻿## Synopsis
 
+[![Prosecco](https://github.com/another-guy/Prosecco/raw/master/Prosecco.png)](https://github.com/another-guy/Prosecco)
+
 Simplifies SQL database querying a bit
 
 ## Code Example
