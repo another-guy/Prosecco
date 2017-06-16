@@ -1,4 +1,4 @@
-﻿## Synopsis
+## Synopsis
 
 [![Prosecco](https://github.com/another-guy/Prosecco/raw/master/Prosecco.png)](https://github.com/another-guy/Prosecco)
 
